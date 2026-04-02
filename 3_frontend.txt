@@ -1,0 +1,352 @@
+#Esivaatimukset: Asenna NVM eri Noden versioiden käyttämiseksi, ja asenna Node 
+https://www.nvmnode.com/guide/download.html
+
+### Alla olevat voisi koettaa myöhemmin automatisoida skrpitiksi ###
+
+# Perusta React projekti TypeScript templatella
+npm create vite@latest ai-skeleton-fe -- --template react-ts
+cd ai-skeleton-fe
+npm install
+
+# Lisää Tilan hallinta ja verkko
+npm install @reduxjs/toolkit @redux-devtools/extension react-redux axios
+
+# Tyylit ja UI
+npm install styled-components react-aria-components
+npm install -D @types/styled-components
+
+# Ikonit (Material Symbols)
+npm install @mui/icons-material @mui/material @emotion/react @emotion/styled
+npm install material-symbols
+#Lisää src/main.tsx -tiedostoon
+import 'material-symbols';
+#Luo src/components/Icon/Icon.tsx
+import styled from 'styled-components';
+
+export const Icon = styled.span.attrs({
+  className: 'material-symbols-outlined',
+})`
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  display: inline-block;
+  user-select: none;
+`;
+
+
+
+npm install @fontsource/roboto
+#Lisää src/main.tsx alkuun
+import '@fontsource/roboto/300.css';
+import '@fontsource/roboto/400.css';
+import '@fontsource/roboto/500.css';
+import '@fontsource/roboto/700.css';
+
+
+npm install -D playwright
+npx playwright install chromium
+npm install -D @types/node
+#Muokkaa tsconfig.node.json
+  "include": [
+    "vite.config.ts",
+    "scripts/check-ui.ts"
+  ]
+
+
+# Avaa package.json ja muokkaa scripts-osiosa virhelogin kirjoittamista tiedostoon Aiderille sekä itse Aiderin käynnistys Podman-konttiin
+  "scripts": {
+    "dev": "vite 2>&1 | tee dev.log",
+    "aider": "podman run -it --rm --add-host=host.ollama:192.168.0.131 --dns 127.0.0.1 -e http_proxy=http://127.0.0.1:1 -e https_proxy=http://127.0.0.1:1 -e no_proxy=host.ollama -e OLLAMA_HOST=http://host.ollama:11434 -e OLLAMA_API_BASE=http://host.ollama:11434 -v .:/app:Z docker.io/paulgauthier/aider-full",
+  }
+
+
+******************************************
+Lisää README.md -tiedostoon alkuun tällainen osio
+## AI Assistant (Aider) Setup
+
+Tämä projekti käyttää lokaaleja tekoälymalleja (Ollama) koodin generointiin. Käytämme DeepSeek R1 -mallia Arkkitehti-roolissa suunnitteluun ja Qwen 2.5 Coderia Editor-roolissa koodin kirjoittamiseen.
+
+### Vaatimukset:
+1. Ollama käynnissä host-koneella (portti 11434).
+2. Podman asennettuna ja `ai-sandbox` verkko luotuna.
+3. Seuraavat mallit ladattuna Ollamaan:
+   - `hf.co/bartowski/Qwen2.5-Coder-14B-Instruct-GGUF:IQ4_XS`
+   - `hf.co/bartowski/deepseek-r1-distill-qwen-14b-GGUF:IQ4_XS`
+
+### Aiderin käynnistys:
+Aiderin asetukset (mallit ja roolit) on määritelty `.aider.conf.yml` -tiedostossa. Projektin arkkitehtuurisäännöt löytyvät `.aider.instructions.md` -tiedostosta.
+
+Käynnistä kehityspalvelin osoitteeseen http://localhost:5173/ esim. Visual Coden Git Bash terminaalissa
+ja näytä lokit terminaalin lisäksi tallentamalla ne dev.log-tiedostoon
+
+npm run dev
+
+Käynnistä Aider esim. Visual Coden Command Prompt terminaalissa
+
+npm run aider
+
+
+
+
+******************************************
+
+
+luo tiedosto
+scripts/dom-snippets.ts
+
+ja laita sen sisään:
+
+
+export function getBodyHTML() {
+  return document.body.innerHTML;
+}
+
+
+#Muokkaa tsconfig.app.json
+  "include": [
+	"src",
+	"scripts/dom-snippets.ts"
+  ]
+
+
+******************************************
+
+
+luo tiedosto
+scripts/check-ui.ts
+
+ja laita sen sisään:
+
+import { chromium } from 'playwright';
+import { getBodyHTML } from './dom-snippets';
+import * as fs from 'fs';
+import * as path from 'path';
+
+async function checkUI() {
+  // 1. Käynnistys
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const consoleErrors: string[] = [];
+
+  // 2. Virheiden seuranta
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(`[CONSOLE]: ${msg.text()}`);
+  });
+  page.on('pageerror', (err) => consoleErrors.push(`[RUNTIME]: ${err.message}`));
+
+  try {
+    // 3. Navigointi (käytetään host-osoitetta kontin sisältä)
+    await page.goto('http://host.containers.internal:5173', { 
+      waitUntil: 'networkidle',
+      timeout: 8000 
+    });
+
+    // 4. Otetaan kuvakaappaus (Aiderin visuaalista analyysia varten)
+    const screenshotPath = 'ui-screenshot.png';
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+
+    // 5. Haetaan DOM-rakenne
+    const bodyHTML = await page.evaluate(getBodyHTML);
+    const title = await page.title();
+
+    // 6. Luodaan raportti
+    const report = [
+      `TIMESTAMP: ${new Date().toISOString()}`,
+      `PAGE TITLE: ${title}`,
+      `SCREENSHOT SAVED TO: ${screenshotPath}`,
+      "\n--- CONSOLE ERRORS ---",
+      consoleErrors.length > 0 ? consoleErrors.join('\n') : "No errors.",
+      "\n--- DOM STRUCTURE ---",
+      bodyHTML.substring(0, 5000), // Rajoitetaan pituutta, ettei konteksti täyty
+      "\n--- END ---"
+    ].join('\n');
+
+    fs.writeFileSync('ui-status.txt', report);
+    console.log('UI check complete. Report and screenshot generated.');
+
+  } catch (error: any) {
+    fs.writeFileSync('ui-status.txt', `CONNECTION FAILED: ${error.message}`);
+  } finally {
+    await browser.close();
+  }
+}
+
+checkUI();
+
+
+
+*************************************************************************************
+
+https://aider.chat/docs/config/aider_conf.html
+Tee projektin juureen tiedosto nimeltä
+.aider.conf.yml
+
+ja laita sen sisällöksi:
+
+# Aider configuration file
+
+# Käytä aina Architect-moodia oletuksena (suositus monimutkaisiin muutoksiin)
+architect: true
+
+#  Arkkitehdin malli (Tätä Aider käyttää suunnitteluun)
+model: ollama/hf.co/bartowski/deepseek-r1-distill-qwen-14b-GGUF:IQ4_XS
+# Ota architect-tila käyttöön
+architect: true
+# Editorin malli (Tätä Aider käyttää koodin kirjoittamiseen)
+editor-model: ollama/hf.co/bartowski/Qwen2.5-Coder-14B-Instruct-GGUF:IQ4_XS
+
+# Air gap Sandbox vuoksi
+check-update: false
+show-model-warnings: false
+show-release-notes: false
+
+
+# Aider ajaa tämän jokaisen muutoksen jälkeen. 
+# Jos tsc (TypeScript compiler) löytää virheitä, Aider yrittää korjata ne heti.
+lint-cmds:
+  - "npx tsc --noEmit"
+  - "npx tsx scripts/check-ui.ts"
+
+# Lisää automaattisesti tärkeät tiedostot kontekstiin
+read:
+  - README.md
+  - package.json
+  - docs/api-spec.md
+# Kerro Aiderille, että se lukee aina nämä kolme tiedostoa nähdäkseen mahdolliset virheet
+  - dev.log
+  - ui-status.txt
+  - ui-screenshot.png
+
+# Automaattiset commit-viestit (Aider tekee nämä puolestasi)
+## Prefix commit messages with 'aider: ' if aider authored the changes (default: False)
+#attribute-commit-message-author: false
+
+## Attribute aider commits in the git committer name (default: True). If explicitly set to True, overrides --attribute-co-authored-by precedence for aider edits.
+#attribute-committer: xxx
+
+## Commit all pending changes with a suitable commit message, then exit
+commit: false
+
+## Specify the chat input history file (default: .aider.input.history)
+input-history-file: .aider.input.history
+
+## Specify the chat history file (default: .aider.chat.history.md)
+chat-history-file: .aider.chat.history.md
+
+## Restore the previous chat history messages (default: False)
+#restore-chat-history: false
+
+## Log the conversation with the LLM to this file (for example, .aider.llm.history)
+llm-history-file: .aider.llm.history
+
+
+
+
+*************************************************************************************
+
+Tee projektin juureen tiedosto nimeltä
+.aider.instructions.md
+
+ja laita sen sisällöksi:
+
+
+# Project Instructions: React Architecture
+
+## Core Tech Stack
+- **Framework:** React + TypeScript (Vite)
+- **Styling:** Styled Components (Prefix: `Styled[ComponentName]`)
+- **UI/A11y:** React Aria Components
+- **State:** RTK Query (Server) & Redux Toolkit Slice (UI)
+- **Icons:** Use the `material-symbols` npm package. 
+
+## Architecture & Coding Rules
+1. **Colocation:** Every component must have its own folder in `src/components/` containing the `.tsx`, `.styled.ts`, and `index.ts`.
+2. **Strict TS:** No `any`. Use proper interfaces/types.
+3. **API:** Use the Axios-based `baseQuery` in RTK Query.
+4. **Clean Code:** Use arrow functions and descriptive naming.
+5. **Icons Handling:** - Icons are used via the `<Icon>` styled component located in `src/components/Icon/`.
+   - Icon names follow the Material Symbols Outlined naming convention.
+   - Do NOT add CDN links to `index.html`.
+
+### API-Driven Development Rules
+1. **API Contract First:** Always refer to the `api-spec.md` (or Swagger/OpenAPI file) before creating components or RTK Query slices.
+2. **Type Safety:** Generate TypeScript interfaces directly from the API definitions. Do not guess property names.
+3. **RTK Query Mapping:** - Each API resource should have its own service file in `src/features/[resource]/[resource]Api.ts`.
+   - Use `transformResponse` if the API data structure needs to be flattened or modified for the UI.
+4. **Mocking (MSW):** If the Backend is not yet available, use Mock Service Worker (MSW) to simulate API responses based on the spec.
+
+## Debugging Protocol
+- If a component fails to render, provide a detailed explanation of potential causes.
+- If I provide a console error, treat it as a high-priority task.
+- Ensure that all API calls have proper `error` state handling (RTK Query), so that error messages are visible in the UI instead of silently failing.
+
+## TDD Workflow (Mandatory)
+1. **Test First:** Before writing any component logic, create a test file in the component folder (e.g., `MyComponent.test.ts` or `MyComponent.spec.ts`).
+2. **Failure:** Run the tests and confirm they fail.
+3. **Implementation:** Write the minimal code to pass the test.
+4. **Visual Check:** Use Playwright for UI-heavy components to ensure correct DOM structure and accessibility.
+5. **Report:** If a test fails, read the test output/report file and fix the code immediately.
+
+
+*************************************************************************************
+
+
+Tee tiedosto nimeltä
+/docs/architecture.md
+
+ja laita sen sisällöksi:
+
+
+# Frontend architecture (reference)
+
+Single source of truth for folder layout and imports. Keep this file updated when you add new top-level areas.
+
+## Target `src/` layout
+
+```text
+src/
+  app/                 # Router, app providers, error boundaries, layouts
+  shared/
+    ui/                # Shared primitives (Icon, layout helpers, …)
+    lib/               # Pure helpers, formatters
+  features/
+    <feature>/
+      components/      # Feature-specific UI (colocated folders per component)
+      <feature>Api.ts  # RTK Query endpoints for this domain (naming may vary)
+      model/           # Types and mappers (optional)
+      slice.ts         # Redux slice if needed (optional)
+  store/
+    store.ts
+    baseApi.ts         # RTK Query base + shared configuration
+    …
+  main.tsx
+  index.css
+```
+
+## Import rules
+
+1. **Features → shared, store, app** — Allowed.
+2. **Feature A → Feature B internals** — **Not allowed.** Lift shared bits to `src/shared/` or expose a minimal public API in a dedicated shared module.
+3. **Shared → features** — **Not allowed** (shared must stay generic).
+
+## RTK Query
+
+- `baseApi` (or equivalent) lives under `src/store/`.
+- Feature-specific endpoints live under `src/features/<feature>/` and attach via `injectEndpoints` or the project’s agreed pattern—stay consistent with existing `store.ts` wiring.
+
+## Related docs
+
+- API contract: `docs/api-spec.md`
+- Full agent rules: `.aider.instructions.md`
+
+
+
+*************************************************************************************
+
+git init
+git add .
+git commit -m "Initial commit from Vite"
+git checkout -B feature-store
+

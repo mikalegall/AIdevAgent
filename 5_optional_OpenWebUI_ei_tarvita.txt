@@ -1,0 +1,63 @@
+Edellisten kohtien 1-4 "air gap Sandboxin" höllennettyä: Open WebUi paikallisesti asennettuna
+
+#Lataa puhe-tekstiksi toiminnallisuus, jotta voit ohjata paikallista Ollama (paikallinen moottori joka pyörittää kielimallia) + Open WebUI (visuaalinen käyttöliittymä moottorille) kokoonpanoasi puheella ilman näppäimistön koskettelua
+https://www.ffmpeg.org/download.html
+--> Windows builds from gyan.dev
+--> ffmpeg-release-essentials.zip
+#Purkaa paketti esim.
+C:\Path_programs\
+#ja lisää ohjelma ympäristömuuttujiin
+https://youtu.be/r1AtmY-RMyQ?si=RMsMx-TkzBDkvixP&t=293
+## Minulla se on
+C:\Path_programs\ffmpeg-8.0.1-essentials_build\bin\
+
+#To support symlinks on Windows, you either need to activate Developer Mode or to run Python as an administrator. In order to activate developer mode, see this article
+https://learn.microsoft.com/en-us/windows/advanced-settings/developer-mode
+
+
+
+#Lataa Python ja asennuksessa rastita ruutu: "Add python.exe to PATH"
+https://www.python.org/downloads/windows/
+
+#Luo virtuaaliympäristö
+python -m venv venv
+#Aktivoi Pythonin virtuaaliympäristö Windowsilla
+.\venv\Scripts\activate
+
+
+#Varmista, että Ollama on käynnissä
+
+#Asenna
+pip install open-webui
+#Käynnistä
+set USER_AGENT=MyOpenWebUI
+open-webui serve
+
+http://localhost:8080
+#Admin tunnuksen luomisen jälkeen vasemmasta alakulmasta löytyy käyttäjäkuvake, jonka takaa
+Settings
+## ja avautuvasta ikkunasta vasemmasta alakulmasta Admin Settings
+-> Connections
+#Ohjaa Ollama API
+http://localhost:11434
+## ja passivoi OpenAI API
+
+#Käytä Open WebUIta
+## ideointiin, kysymyksiin ja tekstin tuottamiseen esim. Mistral kielimallilla
+
+
+**************************************************************************************
+
+podman run -d --name open-webui \
+  -p 3000:8080 \
+  --add-host=host.ollama:127.0.0.1 \
+  -e OLLAMA_BASE_URL=http://host.ollama:11434 \
+  -v open-webui-data:/app/backend/data:Z \
+  --cpus="4" \
+  --memory="4g" \
+  --memory-reservation="2g" \
+  --restart always \
+  ghcr.io/open-webui/open-webui:main
+
+
+
