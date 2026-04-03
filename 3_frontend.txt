@@ -208,12 +208,14 @@ show-release-notes: false
 lint-cmds:
   - "npx tsc --noEmit"
   - "npx tsx scripts/check-ui.ts"
+  - "npx eslint . --max-warnings=0"
 
 # Lisää automaattisesti tärkeät tiedostot kontekstiin
 read:
   - README.md
   - package.json
   - docs/api-spec.md
+  - docs/security-policy.md
 # Kerro Aiderille, että se lukee aina nämä kolme tiedostoa nähdäkseen mahdolliset virheet
   - dev.log
   - ui-status.txt
@@ -289,6 +291,85 @@ ja laita sen sisällöksi:
 4. **Visual Check:** Use Playwright for UI-heavy components to ensure correct DOM structure and accessibility.
 5. **Report:** If a test fails, read the test output/report file and fix the code immediately.
 
+## Frontend Secure Coding Rules (Mandatory for AI Dev Agent)
+These rules apply to **all React components, hooks, state logic, and API integrations**.
+
+### 1. Rendering & XSS Prevention (OWASP A03, CWE-79)
+- React escaping is relied upon by default.
+- All rendering must be **declarative and safe by construction**.
+
+Forbidden:
+- `dangerouslySetInnerHTML`
+- Manual DOM manipulation
+- Rendering raw HTML from API responses
+- Using `eval`, `new Function`, or similar
+
+Required:
+- JSX rendering only
+- Explicit sanitization if HTML rendering is unavoidable (must be justified)
+
+### 2. Trust Boundaries (OWASP A04, CWE-20)
+- Backend responses are **untrusted input**.
+- API data MUST be treated as potentially malformed.
+
+Forbidden:
+- Assuming backend data shape without validation or mapping
+- Blind spreading of API objects into components
+
+Required:
+- Explicit mapping of API → UI models
+- Defensive rendering (null/undefined safe)
+
+### 3. Authentication & Authorization Assumptions (OWASP A01)
+- Frontend must NEVER enforce security decisions.
+- UI checks are cosmetic only.
+
+Forbidden:
+- Relying on frontend logic for access control
+- Hiding UI elements as a “security mechanism”
+
+Required:
+- Treat backend as sole authority
+- UI reflects backend state only
+
+### 4. Secrets & Configuration (OWASP A02, CWE-798)
+- Frontend code is PUBLIC by default.
+
+Forbidden:
+- Secrets, tokens, API keys in frontend code
+- Security-by-obscurity assumptions
+
+Allowed:
+- Public configuration values only
+- Environment variables that are explicitly safe for client exposure
+
+### 5. Dependencies & Supply Chain (OWASP A06)
+- Frontend dependencies are a primary attack surface.
+
+Forbidden:
+- Adding dependencies for trivial helpers
+- Copy-pasting code from unknown sources
+
+Required:
+- Prefer platform / framework features
+- Every dependency must be justified in review
+
+### 6. Error Handling & Logging (OWASP A09)
+- Errors must be user-safe and developer-informative.
+
+Forbidden:
+- Exposing stack traces or internal details to users
+
+Required:
+- User-friendly error messages
+- Debug information only in development mode
+
+### 7. Explicit Rejection Rule
+If a requested frontend implementation violates these rules, the AI Dev Agent MUST:
+1. Stop
+2. Explain which rule is violated
+3. Propose a safe alternative
+
 
 *************************************************************************************
 
@@ -341,7 +422,121 @@ src/
 - API contract: `docs/api-spec.md`
 - Full agent rules: `.aider.instructions.md`
 
+## Frontend Security Architecture
 
+### Core Assumptions
+- Frontend code is untrusted and public.
+- Backend is the sole authority for security decisions.
+- All external data is untrusted by default.
+
+### Threat Model (Frontend)
+- Cross-site scripting (XSS)
+- Dependency and supply-chain attacks
+- Unsafe rendering of dynamic data
+- Accidental leakage of secrets
+- Incorrect trust in backend responses
+
+### Review Heuristics for Humans
+When reviewing AI-authored frontend code, always check:
+1. Is anything rendered as raw HTML?
+2. Is backend data mapped defensively?
+3. Are UI checks mistaken for security?
+4. Does any dependency look unnecessary?
+5. Could this leak information to the browser?
+``
+
+*************************************************************************************
+
+
+Tee tiedosto nimeltä
+/docs/security-policy.md
+
+ja laita sen sisällöksi:
+
+
+# Frontend Security Policy (React + TypeScript)
+
+## Core Principles
+- Frontend is not a security boundary
+- Never trust data from APIs implicitly
+- Prefer explicitness over convenience
+
+## Banned Patterns
+- dangerouslySetInnerHTML
+- DOM manipulation outside React
+- Secrets in client code
+- Security logic in UI
+
+## Alignment
+- OWASP Top 10: A01, A03, A06, A09
+- CWE: 79, 20, 798, 862
+
+*************************************************************************************
+
+Muokkaa tiedostoa
+.gitignore
+
+ja varmista sen sisällöksi:
+
+# =====================
+# Logs
+# =====================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+dev.log
+
+# =====================
+# Node / build
+# =====================
+node_modules/
+dist
+dist-ssr
+*.local
+
+# =====================
+# Aider / AI tooling
+# =====================
+.aider/
+.aider*
+.aider.chat.history.md
+.aider.tags.cache.v4
+.aider.conf1.yml
+.aider.input.history
+.aider.llm.history
+
+# =====================
+# UI / temp artifacts
+# =====================
+ui-status.txt
+ui-screenshot.png
+
+# =====================
+# Cache
+# =====================
+.cache/
+
+# =====================
+# Git internals (turvavyö)
+# =====================
+.git/
+
+# =====================
+# Editor directories and files
+# =====================
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 *************************************************************************************
 
